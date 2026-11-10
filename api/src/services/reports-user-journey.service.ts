@@ -116,7 +116,7 @@ export async function generateUserJourneyDocFromLogs(journeyLogs: unknown, hints
   }
 
   const region = getAwsRegionValue();
-  const modelId = process.env.BEDROCK_SONNET_MODEL_ID?.trim() || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
+  const modelId = process.env.BEDROCK_MODEL_ID?.trim() || 'global.anthropic.claude-haiku-5-5';
   const credentialConfig = resolveBedrockCredentialConfig();
 
   const bedrock = createAmazonBedrock({
