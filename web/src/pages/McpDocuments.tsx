@@ -106,6 +106,30 @@ export default function McpDocuments() {
                   <span className="font-mono text-xs">forceRegenerate=false</span>.
                 </p>
               </article>
+              <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="font-mono text-xs font-semibold text-slate-900">delivery_dashboard</p>
+                <p className="mt-2 text-sm text-slate-700">
+                  Query Delivery Dashboard data shown on <span className="font-mono text-xs">/dashboard</span>, mapped from{' '}
+                  <span className="font-mono text-xs">/api/delivery-dashboard</span>. Optional args:{' '}
+                  <span className="font-mono text-xs">startDate</span>, <span className="font-mono text-xs">endDate</span> (YYYY-MM-DD),{' '}
+                  <span className="font-mono text-xs">filterId</span>, <span className="font-mono text-xs">lineItemId</span>.
+                </p>
+              </article>
+              <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="font-mono text-xs font-semibold text-slate-900">delivery_dashboard_settings</p>
+                <p className="mt-2 text-sm text-slate-700">
+                  List configured Click URL IDs and names, mapped from{' '}
+                  <span className="font-mono text-xs">/api/delivery-dashboard/settings</span>.
+                </p>
+              </article>
+              <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="font-mono text-xs font-semibold text-slate-900">delivery_dashboard_refresh_logs</p>
+                <p className="mt-2 text-sm text-slate-700">
+                  List recent metric refresh job logs, mapped from{' '}
+                  <span className="font-mono text-xs">/api/delivery-dashboard/refresh/logs</span>. Optional arg:{' '}
+                  <span className="font-mono text-xs">limit</span> (default 100).
+                </p>
+              </article>
             </div>
           </section>
 
@@ -116,8 +140,9 @@ export default function McpDocuments() {
               <li>Call `initialize` first, then `notifications/initialized`.</li>
               <li>Call `tools/list` to discover tools.</li>
               <li>
-                Call `tools/call` with name `category_attributed_list`, `category_attributed_detail`, or
-                `category_attributed_user_journey_by_uid`.
+                Call `tools/call` with name `category_attributed_list`, `category_attributed_detail`,
+                `category_attributed_user_journey_by_uid`, `delivery_dashboard`, `delivery_dashboard_settings`, or
+                `delivery_dashboard_refresh_logs`.
               </li>
             </ol>
             <pre className="mt-3 overflow-x-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">{initializeRequest}</pre>

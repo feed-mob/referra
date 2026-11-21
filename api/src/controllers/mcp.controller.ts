@@ -1,5 +1,7 @@
 import { logs, referrerRaws, reports, users } from "../../../packages/db/index.js";
 import { normalizeAttributionLogicMapping } from "../config/attribution.config.js";
+import { getDeliveryDashboard, listDeliveryRefreshLogs } from "../services/delivery-dashboard.service.js";
+import { getDeliveryMetricFilterSettings } from "../services/delivery-metric-settings.service.js";
 import { getReportDetailPayload } from "../services/reports-detail.service.js";
 import { generateUserJourneyDocFromLogs } from "../services/reports-user-journey.service.js";
 
@@ -26,6 +28,9 @@ type McpTool = {
 const MCP_TOOL_NAME_LIST = "category_attributed_list";
 const MCP_TOOL_NAME_DETAIL = "category_attributed_detail";
 const MCP_TOOL_NAME_USER_JOURNEY_BY_UID = "category_attributed_user_journey_by_uid";
+const MCP_TOOL_NAME_DELIVERY_DASHBOARD = "delivery_dashboard";
+const MCP_TOOL_NAME_DELIVERY_DASHBOARD_SETTINGS = "delivery_dashboard_settings";
+const MCP_TOOL_NAME_DELIVERY_DASHBOARD_REFRESH_LOGS = "delivery_dashboard_refresh_logs";
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 
 const mcpTools: McpTool[] = [
@@ -141,6 +146,59 @@ const mcpTools: McpTool[] = [
         },
       },
       required: ["reportId", "uid"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: MCP_TOOL_NAME_DELIVERY_DASHBOARD,
+    description:
+      "Query Delivery Dashboard data (same as the /dashboard page): impressions, installs, IPM, bid requests/bids, hourly series, period comparison, bid reasons, bid prices, top DMA and creatives.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        startDate: {
+          type: "string",
+          description: "Optional start date (UTC), format YYYY-MM-DD. Default today.",
+        },
+        endDate: {
+          type: "string",
+          description: "Optional end date (UTC, inclusive), format YYYY-MM-DD. Default startDate.",
+        },
+        filterId: {
+          type: "integer",
+          minimum: 0,
+          description: "Optional Click URL ID. Use delivery_dashboard_settings to list configured ids. Default all configured Click URL IDs.",
+        },
+        lineItemId: {
+          type: "string",
+          description: "Optional line item (ADSET_ID) filter. Requires filterId; bid prices are only returned when set.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: MCP_TOOL_NAME_DELIVERY_DASHBOARD_SETTINGS,
+    description: "List Delivery Dashboard configured Click URL IDs, their names, and whether bid metrics are shown.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: MCP_TOOL_NAME_DELIVERY_DASHBOARD_REFRESH_LOGS,
+    description: "List recent Delivery Dashboard metric refresh job logs.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 500,
+          description: "Max returned rows. Default 100.",
+        },
+      },
       additionalProperties: false,
     },
   },
@@ -437,6 +495,73 @@ async function callCategoryAttributedUserJourneyByUidTool(args: unknown) {
   };
 }
 
+function toToolResult(payload: unknown) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(payload, null, 2),
+      },
+    ],
+    structuredContent: payload,
+  };
+}
+
+function normalizeDashboardDate(value: unknown, name: string, fallback: string) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    throw new Error(`${name} must use YYYY-MM-DD format`);
+  }
+  const date = value.trim();
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw new Error(`${name} must be a valid calendar date`);
+  }
+  return date;
+}
+
+async function callDeliveryDashboardTool(args: unknown) {
+  const value = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : {};
+  const startDate = normalizeDashboardDate(value.startDate, "startDate", new Date().toISOString().slice(0, 10));
+  const endDate = normalizeDashboardDate(value.endDate, "endDate", startDate);
+  if (endDate < startDate) throw new Error("endDate must be on or after startDate");
+
+  let filterId: number | undefined;
+  if (value.filterId !== undefined && value.filterId !== null && value.filterId !== "") {
+    const parsed = Number(value.filterId);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error("filterId must be a non-negative integer");
+    filterId = parsed;
+  }
+  const lineItemId =
+    typeof value.lineItemId === "string" || typeof value.lineItemId === "number"
+      ? String(value.lineItemId).trim() || undefined
+      : undefined;
+
+  const payload = await getDeliveryDashboard(startDate, endDate, filterId, lineItemId);
+  return toToolResult({ startDate, endDate, ...payload });
+}
+
+async function callDeliveryDashboardSettingsTool() {
+  return toToolResult(await getDeliveryMetricFilterSettings());
+}
+
+async function callDeliveryDashboardRefreshLogsTool(args: unknown) {
+  const value = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : {};
+  const limitRaw = Number(value.limit);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : 100;
+  const items = await listDeliveryRefreshLogs(limit);
+  return toToolResult({ items, total: items.length });
+}
+
+const mcpToolHandlers: Record<string, (args: unknown) => Promise<unknown>> = {
+  [MCP_TOOL_NAME_LIST]: callCategoryAttributedListTool,
+  [MCP_TOOL_NAME_DETAIL]: callCategoryAttributedDetailTool,
+  [MCP_TOOL_NAME_USER_JOURNEY_BY_UID]: callCategoryAttributedUserJourneyByUidTool,
+  [MCP_TOOL_NAME_DELIVERY_DASHBOARD]: callDeliveryDashboardTool,
+  [MCP_TOOL_NAME_DELIVERY_DASHBOARD_SETTINGS]: callDeliveryDashboardSettingsTool,
+  [MCP_TOOL_NAME_DELIVERY_DASHBOARD_REFRESH_LOGS]: callDeliveryDashboardRefreshLogsTool,
+};
+
 export const mcpController = {
   async remote(req: Request) {
     const user = await authenticate(req);
@@ -492,21 +617,13 @@ export const mcpController = {
       };
       const toolName = typeof params.name === "string" ? params.name.trim() : "";
 
-      if (
-        toolName !== MCP_TOOL_NAME_LIST &&
-        toolName !== MCP_TOOL_NAME_DETAIL &&
-        toolName !== MCP_TOOL_NAME_USER_JOURNEY_BY_UID
-      ) {
+      const handler = Object.hasOwn(mcpToolHandlers, toolName) ? mcpToolHandlers[toolName] : undefined;
+      if (!handler) {
         return toJsonRpcError(payload.id, -32601, `Unknown tool: ${toolName || "(empty)"}`);
       }
 
       try {
-        const result =
-          toolName === MCP_TOOL_NAME_DETAIL
-            ? await callCategoryAttributedDetailTool(params.arguments)
-            : toolName === MCP_TOOL_NAME_USER_JOURNEY_BY_UID
-              ? await callCategoryAttributedUserJourneyByUidTool(params.arguments)
-              : await callCategoryAttributedListTool(params.arguments);
+        const result = await handler(params.arguments);
         return toJsonRpcResult(payload.id, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
