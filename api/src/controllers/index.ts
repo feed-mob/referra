@@ -1,6 +1,7 @@
 export { healthController } from "./health.controller.js";
 export { manualAttributedController } from "./manual-attribution-attributed.controller.js";
 export { mcpController } from "./mcp.controller.js";
+export { oauthController } from "./oauth.controller.js";
 export { nonAttributedReportsController } from "./non-attributed-reports.controller.js";
 export { reportsController } from "./reports.controller.js";
 export { usersController } from "./users.controller.js";

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/ToastProvider';
 
@@ -217,10 +217,13 @@ function LedgerVisual() {
 
 export default function Landing() {
   const { isAuthenticated, loginWithGoogleCredential } = useAuth();
+  const location = useLocation();
   const { buttonContainerRef, googleClientId, isReady } = useGoogleIdentity(loginWithGoogleCredential);
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    const from = (location.state as { from?: unknown } | null)?.from;
+    const target = typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') ? from : '/dashboard';
+    return <Navigate to={target} replace />;
   }
 
   return (

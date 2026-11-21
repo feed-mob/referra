@@ -1,15 +1,9 @@
-import { useMemo, useState } from 'react';
-import { useOptionalAuth } from '../auth/AuthContext';
+import { useMemo } from 'react';
 import { AppSidebar } from '../components/common/AppSidebar';
 import { API_URL } from '../config/api';
 
 export default function McpDocuments() {
-  const auth = useOptionalAuth();
-  const [copied, setCopied] = useState(false);
-
   const endpoint = useMemo(() => `${API_URL}/api/mcp`, []);
-  const bearerToken = auth?.user?.bearerToken || '';
-  const authorizationHeader = bearerToken ? `Bearer ${bearerToken}` : 'Bearer <your-token>';
   const initializeRequest = `{
   "jsonrpc": "2.0",
   "id": 1,
@@ -20,31 +14,15 @@ export default function McpDocuments() {
     "capabilities": {}
   }
 }`;
+  const claudeCodeSample = `claude mcp add --transport http ai-referrer ${endpoint}`;
   const clientConfigSample = `{
   "mcpServers": {
     "ai-referrer": {
       "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "${endpoint}",
-        "--header",
-        "Authorization: ${authorizationHeader}"
-      ]
+      "args": ["-y", "mcp-remote", "${endpoint}"]
     }
   }
 }`;
-
-  async function handleCopyToken() {
-    if (!bearerToken) return;
-    try {
-      await navigator.clipboard.writeText(bearerToken);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  }
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#f7f9fb] text-slate-900 antialiased">
@@ -66,20 +44,23 @@ export default function McpDocuments() {
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-700">Authentication</h2>
-            <p className="mt-2 text-sm text-slate-600">Each user has an individual Bearer Token. Pass it in the Authorization header.</p>
-            <div className="mt-3 rounded-md bg-slate-50 p-3">
-              <p className="text-xs font-semibold text-slate-500">Authorization</p>
-              <p className="mt-1 break-all font-mono text-xs text-slate-900">{authorizationHeader}</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleCopyToken}
-              disabled={!bearerToken}
-              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {copied ? 'Copied' : 'Copy Token'}
-            </button>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-700">Authentication (OAuth 2.1)</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              The MCP endpoint is protected with OAuth, following the MCP authorization spec. MCP clients discover the
+              authorization server automatically: the first request returns <span className="font-mono text-xs">401</span> with
+              a <span className="font-mono text-xs">WWW-Authenticate</span> header, then the client registers itself, opens a
+              browser window for you to sign in with Google and approve access, and keeps the access token refreshed.
+            </p>
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-600">
+              <li>
+                Protected resource metadata: <span className="font-mono">{API_URL}/.well-known/oauth-protected-resource/api/mcp</span>
+              </li>
+              <li>
+                Authorization server metadata: <span className="font-mono">{API_URL}/.well-known/oauth-authorization-server</span>
+              </li>
+              <li>Authorization code flow with PKCE (S256), dynamic client registration, scope <span className="font-mono">mcp</span>.</li>
+              <li>Access tokens expire after 1 hour; refresh tokens after 30 days (rotated on every use).</li>
+            </ul>
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5">
@@ -136,7 +117,7 @@ export default function McpDocuments() {
           <section className="rounded-xl border border-slate-200 bg-white p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-700">MCP Usage</h2>
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-700">
-              <li>Use Bearer Token in the `Authorization` header for every request.</li>
+              <li>Complete the OAuth flow and send the access token as `Authorization: Bearer &lt;access_token&gt;`.</li>
               <li>Call `initialize` first, then `notifications/initialized`.</li>
               <li>Call `tools/list` to discover tools.</li>
               <li>
@@ -149,11 +130,13 @@ export default function McpDocuments() {
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-700">Config Sample (mcp-remote)</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Use this JSON in MCP clients that support stdio server configuration (for example via `mcp-remote`).
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-700">Config Samples</h2>
+            <p className="mt-2 text-sm text-slate-600">Claude Code (Streamable HTTP, OAuth handled by the client):</p>
+            <pre className="mt-2 overflow-x-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">{claudeCodeSample}</pre>
+            <p className="mt-4 text-sm text-slate-600">
+              Clients that only support stdio servers can use `mcp-remote`, which runs the OAuth flow in your browser:
             </p>
-            <pre className="mt-3 overflow-x-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">{clientConfigSample}</pre>
+            <pre className="mt-2 overflow-x-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">{clientConfigSample}</pre>
           </section>
         </div>
       </main>

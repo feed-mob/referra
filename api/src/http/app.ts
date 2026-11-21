@@ -41,6 +41,7 @@ function getCorsHeaders(req: Request) {
     "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": allowedMethods,
     "Access-Control-Allow-Headers": requestHeaders || defaultAllowedHeaders,
+    "Access-Control-Expose-Headers": "WWW-Authenticate",
     Vary: "Origin",
   });
   return headers;

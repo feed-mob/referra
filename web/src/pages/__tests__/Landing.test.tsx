@@ -7,6 +7,7 @@ import Landing from '../Landing';
 const mockNavigate = vi.fn();
 const mockUseAuth = vi.fn();
 const mockToastError = vi.fn();
+let mockLocation: { pathname: string; search: string; state: unknown } = { pathname: '/', search: '', state: null };
 
 const initializeMock = vi.fn();
 const renderButtonMock = vi.fn();
@@ -14,6 +15,7 @@ const renderButtonMock = vi.fn();
 vi.mock('react-router-dom', () => ({
   MemoryRouter: ({ children }: { children: ReactNode }) => <>{children}</>,
   useNavigate: () => mockNavigate,
+  useLocation: () => mockLocation,
   Navigate: ({ to }: { to: string }) => {
     mockNavigate(to, { replace: true });
     return null;
@@ -38,6 +40,7 @@ describe('Landing', () => {
     mockNavigate.mockReset();
     mockUseAuth.mockReset();
     mockToastError.mockReset();
+    mockLocation = { pathname: '/', search: '', state: null };
     initializeMock.mockReset();
     renderButtonMock.mockReset();
 
@@ -72,6 +75,38 @@ describe('Landing', () => {
     expect(renderButtonMock).toHaveBeenCalledOnce();
     expect(screen.getByTestId('google-signin-button')).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('redirects authenticated user back to the page they came from (e.g. OAuth consent)', () => {
+    mockLocation = { pathname: '/', search: '', state: { from: '/oauth/authorize?client_id=abc&state=xyz' } };
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      loginWithGoogleCredential: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <Landing />
+      </MemoryRouter>,
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/oauth/authorize?client_id=abc&state=xyz', { replace: true });
+  });
+
+  it('ignores protocol-relative return targets', () => {
+    mockLocation = { pathname: '/', search: '', state: { from: '//evil.example.com' } };
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      loginWithGoogleCredential: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <Landing />
+      </MemoryRouter>,
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/dashboard', { replace: true });
   });
 
   it('redirects authenticated user to dashboard', () => {

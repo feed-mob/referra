@@ -1,4 +1,9 @@
-import { logs, referrerRaws, reports, users } from "../../../packages/db/index.js";
+import { logs, referrerRaws, reports } from "../../../packages/db/index.js";
+import {
+  MCP_OAUTH_SCOPE,
+  authenticateMcpAccessToken,
+  getProtectedResourceMetadataUrl,
+} from "../services/mcp-oauth.service.js";
 import { normalizeAttributionLogicMapping } from "../config/attribution.config.js";
 import { getDeliveryDashboard, listDeliveryRefreshLogs } from "../services/delivery-dashboard.service.js";
 import { getDeliveryMetricFilterSettings } from "../services/delivery-metric-settings.service.js";
@@ -240,9 +245,21 @@ function readBearerToken(req: Request) {
 
 async function authenticate(req: Request) {
   const token = readBearerToken(req);
-  if (!token) return null;
+  if (!token) return { user: null, hadToken: false };
 
-  return await users.findByBearerToken(token);
+  return { user: await authenticateMcpAccessToken(req, token), hadToken: true };
+}
+
+function unauthorizedResponse(req: Request, hadToken: boolean) {
+  const params = [
+    `resource_metadata="${getProtectedResourceMetadataUrl(req)}"`,
+    `scope="${MCP_OAUTH_SCOPE}"`,
+    ...(hadToken ? ['error="invalid_token"', 'error_description="The access token is invalid or expired"'] : []),
+  ];
+  return Response.json(
+    { error: hadToken ? "invalid_token" : "Unauthorized" },
+    { status: 401, headers: { "WWW-Authenticate": `Bearer ${params.join(", ")}` } },
+  );
 }
 
 function normalizeToolArgs(raw: unknown) {
@@ -564,9 +581,9 @@ const mcpToolHandlers: Record<string, (args: unknown) => Promise<unknown>> = {
 
 export const mcpController = {
   async remote(req: Request) {
-    const user = await authenticate(req);
+    const { user, hadToken } = await authenticate(req);
     if (!user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorizedResponse(req, hadToken);
     }
 
     let payload: JsonRpcRequest;
@@ -596,8 +613,8 @@ export const mcpController = {
       });
     }
 
-    if (payload.method === "notifications/initialized") {
-      return new Response(null, { status: 204 });
+    if (payload.method.startsWith("notifications/")) {
+      return new Response(null, { status: 202 });
     }
 
     if (payload.method === "ping") {

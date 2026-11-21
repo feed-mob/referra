@@ -17,6 +17,7 @@ import McpDocuments from './pages/McpDocuments'
 import NonAttributedReports from './pages/NonAttributedReports'
 import NonAttributedReportsDetail from './pages/NonAttributedReportsDetail'
 import ReportsDetail from './pages/ReportsDetail'
+import OAuthAuthorize from './pages/OAuthAuthorize'
 import { AuthProvider } from './auth/AuthContext'
 import RequireAuth from './components/RequireAuth'
 import { ToastProvider } from './components/ToastProvider'
@@ -68,6 +69,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/non-attributed-reports" element={<NonAttributedReports />} />
               <Route path="/non-attributed-reports/:reportId" element={<NonAttributedReportsDetail />} />
               <Route path="/reports/:reportId" element={<ReportsDetail />} />
+              <Route path="/oauth/authorize" element={<OAuthAuthorize />} />
             </Route>
           </Routes>
         </BrowserRouter>

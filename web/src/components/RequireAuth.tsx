@@ -6,7 +6,7 @@ export default function RequireAuth() {
   const { isAuthenticated } = useAuth();
 
   if (!isAuthenticated) {
-    return <Navigate to="/" state={{ from: location.pathname }} replace />;
+    return <Navigate to="/" state={{ from: `${location.pathname}${location.search}` }} replace />;
   }
 
   return <Outlet />;
