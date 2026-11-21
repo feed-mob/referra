@@ -1,3 +1,4 @@
+import { deliveryBidMetricsSql } from '../lib/delivery-bid-metrics.lib.js';
 import {
   GetQueryExecutionCommand,
   GetQueryResultsCommand,
@@ -138,6 +139,23 @@ matched_line_items AS (
   FROM impression_events
   WHERE filter_id IS NOT NULL AND line_item_id IS NOT NULL
 ),
+${config.bidMetricsEnabled ? `bid_transactions AS (
+  SELECT date_trunc('hour', from_iso8601_timestamp(json_extract_scalar(bids.raw_json, '$.timestamp'))) AS bucket_start,
+    matched.filter_id, matched.line_item_id,
+    json_extract_scalar(bids.raw_json, '$.event') AS event_type,
+    try_cast(json_extract_scalar(bids.raw_json, '$.status') AS integer) AS status,
+    try_cast(json_extract_scalar(bids.raw_json, '$.result.PriceUSD') AS double) AS price_usd,
+    coalesce(nullif(trim(coalesce(
+      json_extract_scalar(bids.raw_json, '$.reason'),
+      json_extract_scalar(bids.raw_json, '$.result.reason'),
+      json_extract_scalar(bids.raw_json, '$.result.Reason')
+    )), ''), 'Unknown') AS reason_category
+  FROM ${config.bidTable} bids
+  JOIN matched_line_items matched
+    ON json_extract_scalar(bids.raw_json, '$.result.LineItemID') = matched.line_item_id
+  WHERE bids."date" = '${date}'
+    AND json_extract_scalar(bids.raw_json, '$.timestamp') IS NOT NULL
+),` : ''}
 impression_metrics AS (
   SELECT
     CASE WHEN grouping(bucket_start) = 0 THEN bucket_start ELSE day_start END AS bucket_start,
@@ -164,50 +182,7 @@ SELECT bucket_start, metric_type, filter_id, line_item_id, dimension, impression
 FROM (
   SELECT * FROM impression_metrics${config.bidMetricsEnabled ? `
   UNION ALL
-  SELECT bucket_start, 'bid' AS metric_type, filter_id, line_item_id, 'ALL' AS dimension,
-    0 AS impressions, 0 AS installs, 0 AS bid_requests, count(*) AS bids, avg(price_usd) AS bid_price_usd
-  FROM (
-    SELECT date_trunc('hour', from_iso8601_timestamp(json_extract_scalar(bids.raw_json, '$.timestamp'))) AS bucket_start,
-      matched.filter_id,
-      json_extract_scalar(bids.raw_json, '$.result.LineItemID') AS line_item_id,
-      try_cast(json_extract_scalar(bids.raw_json, '$.result.PriceUSD') AS double) AS price_usd
-    FROM ${config.bidTable}
-      bids
-    JOIN matched_line_items matched
-      ON json_extract_scalar(bids.raw_json, '$.result.LineItemID') = matched.line_item_id
-    WHERE bids."date" = '${date}'
-      AND json_extract_scalar(bids.raw_json, '$.result.LineItemID') IS NOT NULL
-      AND try_cast(json_extract_scalar(bids.raw_json, '$.result.PriceUSD') AS double) IS NOT NULL
-      AND lower(coalesce(
-        json_extract_scalar(bids.raw_json, '$.reason'),
-        json_extract_scalar(bids.raw_json, '$.result.reason'),
-        json_extract_scalar(bids.raw_json, '$.result.Reason'),
-        ''
-      )) NOT LIKE '%no bid%'
-  ) line_item_bid_events
-  GROUP BY bucket_start, filter_id, line_item_id` : ''}
-  ${config.bidMetricsEnabled ? `
-  UNION ALL
-  SELECT bucket_start, 'bid_reason' AS metric_type, filter_id, line_item_id, reason_category AS dimension,
-    0 AS impressions, 0 AS installs, count(*) AS bid_requests, count(*) AS bids, 0.0 AS bid_price_usd
-  FROM (
-    SELECT date_trunc('hour', from_iso8601_timestamp(json_extract_scalar(bids.raw_json, '$.timestamp'))) AS bucket_start,
-      matched.filter_id,
-      json_extract_scalar(bids.raw_json, '$.result.LineItemID') AS line_item_id,
-    coalesce(nullif(trim(coalesce(
-        json_extract_scalar(bids.raw_json, '$.reason'),
-        json_extract_scalar(bids.raw_json, '$.result.reason'),
-        json_extract_scalar(bids.raw_json, '$.result.Reason'),
-        ''
-      )), ''), 'Unknown') AS reason_category
-    FROM ${config.bidTable} bids
-    JOIN matched_line_items matched
-      ON json_extract_scalar(bids.raw_json, '$.result.LineItemID') = matched.line_item_id
-    WHERE bids."date" = '${date}'
-      AND json_extract_scalar(bids.raw_json, '$.result.LineItemID') IS NOT NULL
-      AND json_extract_scalar(bids.raw_json, '$.timestamp') IS NOT NULL
-  ) reason_events
-  GROUP BY bucket_start, filter_id, line_item_id, reason_category` : ''}
+  ${deliveryBidMetricsSql}` : ''}
 )
 ORDER BY bucket_start, metric_type, dimension
 `;
@@ -554,14 +529,16 @@ export async function getDeliveryDashboard(startDate = new Date().toISOString().
     .filter((row) => row.metricType === 'bid_reason' && row.bucketStart >= rangeSince && row.bucketStart < rangeUntil)
     .reduce((result, row) => {
       const current = result.get(row.bucketStart.getTime()) || { time: row.bucketStart, bid: 0, noBid: 0 };
-      if (row.dimension.toLowerCase().includes('bid') && !row.dimension.toLowerCase().includes('no bid')) current.bid += row.bids;
-      else current.noBid += row.bids;
+      // Older reason rows stored request counts in bids, including on refusal rows.
+      const offered = row.dimension === 'bid' || row.dimension.startsWith('bid:') ? row.bids : 0;
+      current.bid += offered;
+      current.noBid += row.bidRequests - offered;
       result.set(row.bucketStart.getTime(), current);
       return result;
     }, new Map<number, { time: Date; bid: number; noBid: number }>());
   const reasonCounts = selectedRows
     .filter((row) => row.metricType === 'bid_reason' && row.bucketStart >= rangeSince && row.bucketStart < rangeUntil && !['bid', 'no bid'].includes(row.dimension.trim().toLowerCase()))
-    .reduce((result, row) => result.set(row.dimension, (result.get(row.dimension) || 0) + row.bids), new Map<string, number>());
+    .reduce((result, row) => result.set(row.dimension, (result.get(row.dimension) || 0) + row.bidRequests), new Map<string, number>());
   // Every bid record for a matched LineItemID counts as a request, whatever its reason.
   const bidRequestsByHour = selectedRows
     .filter((row) => row.metricType === 'bid_reason' && row.bucketStart >= rangeSince && row.bucketStart < rangeUntil)
