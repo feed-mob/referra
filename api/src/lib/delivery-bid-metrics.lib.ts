@@ -7,7 +7,9 @@ SELECT * FROM (
     WHERE event_type = 'bid_transaction'
   )
   SELECT bucket_start, 'bid' AS metric_type, filter_id, line_item_id, 'ALL' AS dimension,
-    0 AS impressions, 0 AS installs, 0 AS bid_requests, count(*) AS bids, avg(price_usd) AS bid_price_usd
+    0 AS impressions, 0 AS installs, 0 AS bid_requests, count(*) AS bids,
+    -- Zero-price offers would drag the average down, so only positive prices are averaged.
+    coalesce(avg(CASE WHEN price_usd > 0 THEN price_usd END), 0.0) AS bid_price_usd
   FROM transactions
   WHERE offered
   GROUP BY bucket_start, filter_id, line_item_id

@@ -10,6 +10,7 @@ test('counts only successful offers while retaining refusals and errors in reque
         VALUES
           (10, 23837, '129', 'bid_transaction', 200, 'bid:conversion_model', 12.0),
           (10, 23837, '129', 'bid_transaction', 200, 'bid', 8.0),
+          (10, 23837, '129', 'bid_transaction', 200, 'bid', 0.0),
           (10, 23837, '129', 'bid_transaction', 204, 'conversion_model_below_threshold', 0.0),
           (10, 23837, '129', 'bid_transaction', 204, 'below_floor', 0.0),
           (10, 23837, '129', 'bid_transaction', 500, 'bid:conversion_model', 12.0),
@@ -18,10 +19,10 @@ test('counts only successful offers while retaining refusals and errors in reque
       )
       ${deliveryBidMetricsSql}
     `).all() as Array<{ metric_type: string; dimension: string; bids: number; bid_requests: number; bid_price_usd: number }>;
-    expect(rows.filter(row => row.metric_type === 'bid')).toMatchObject([{ bids: 2, bid_price_usd: 10 }]);
+    expect(rows.filter(row => row.metric_type === 'bid')).toMatchObject([{ bids: 3, bid_price_usd: 10 }]);
     const reasons = rows.filter(row => row.metric_type === 'bid_reason');
-    expect(reasons.reduce((sum, row) => sum + row.bid_requests, 0)).toBe(6);
-    expect(reasons.reduce((sum, row) => sum + row.bids, 0)).toBe(2);
+    expect(reasons.reduce((sum, row) => sum + row.bid_requests, 0)).toBe(7);
+    expect(reasons.reduce((sum, row) => sum + row.bids, 0)).toBe(3);
     expect(reasons.find(row => row.dimension === 'bid:conversion_model')).toMatchObject({ bid_requests: 2, bids: 1 });
     for (const reason of ['below_floor', 'conversion_model_below_threshold', 'invalid_bid']) {
       expect(reasons.find(row => row.dimension === reason)).toMatchObject({ bid_requests: 1, bids: 0 });

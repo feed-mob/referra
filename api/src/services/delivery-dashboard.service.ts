@@ -632,7 +632,7 @@ export async function getDeliveryDashboard(startDate = new Date().toISOString().
       bidRate: bidRequestsByHour.get(row.bucketStart.getTime()) ? ((matchedBidsByHour.get(row.bucketStart.getTime()) || 0) / bidRequestsByHour.get(row.bucketStart.getTime())!) * 100 : 0,
       winRate: matchedBidsByHour.get(row.bucketStart.getTime()) ? (row.impressions / matchedBidsByHour.get(row.bucketStart.getTime())!) * 100 : 0,
     })),
-    bidPrices: rows.filter((row) => row.metricType === 'bid' && row.lineItemId && row.bucketStart >= rangeSince && row.bucketStart < rangeUntil && normalizedLineItemId && row.lineItemId === normalizedLineItemId && (filterId === undefined || matchedLineItemIds.has(row.lineItemId)))
+    bidPrices: rows.filter((row) => row.metricType === 'bid' && row.bidPriceUSD > 0 && row.lineItemId && row.bucketStart >= rangeSince && row.bucketStart < rangeUntil && normalizedLineItemId && row.lineItemId === normalizedLineItemId && (filterId === undefined || matchedLineItemIds.has(row.lineItemId)))
       .map((row) => ({ time: row.bucketStart.toISOString(), lineItemId: row.lineItemId as string, priceUSD: roundToTwo(row.bidPriceUSD) }))
       .sort((left, right) => left.time.localeCompare(right.time) || left.lineItemId.localeCompare(right.lineItemId)),
     bidReasonCounts: Array.from(bidReasonByHour.values()).sort((left, right) => left.time.getTime() - right.time.getTime()).map((row) => ({ time: row.time.toISOString(), bid: row.bid, noBid: row.noBid })),
